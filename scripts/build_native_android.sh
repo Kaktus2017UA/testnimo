@@ -72,6 +72,7 @@ cmake -S "${WORK}/nemo-speech" -B "${WORK}/nemo-build" -G Ninja \
   -DGGML_CUDA=OFF \
   -DGGML_METAL=OFF \
   -DGGML_VULKAN=OFF \
+  -DNEMO_SPEECH_GGML_PATCHED=OFF \
   -DCMAKE_INSTALL_PREFIX="${WORK}/nemo-install"
 
 cmake --build "${WORK}/nemo-build" --parallel
