@@ -89,10 +89,4 @@ cp -a "${WORK}/nemo-install/." "${SDK_DST}/"
 find "${WORK}/nemo-install" "${WORK}/deps/sentencepiece" \
   -type f -name '*.so' -exec cp -f {} "${JNI_DST}/" \;
 
-LIBCXX="$(find "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt" \
-  -path "*/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" | head -n 1 || true)"
-if [[ -n "${LIBCXX}" ]]; then
-  cp -f "${LIBCXX}" "${JNI_DST}/"
-fi
-
 echo "Native SDK staged. Build with: gradle :app:assembleDebug"
