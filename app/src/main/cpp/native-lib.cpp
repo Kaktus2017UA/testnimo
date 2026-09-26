@@ -28,8 +28,15 @@ struct LiveHandle {
     nemo_speech_diar_model* model = nullptr;
     nemo_speech_diar_stream* stream = nullptr;
 };
+
+struct ConversationHandle {
+    nemo_speech_asr_recognizer* recognizer = nullptr;
+    nemo_speech_asr_stream* stream = nullptr;
+};
+
 static std::mutex g_mutex;
 static std::unordered_map<int64_t, LiveHandle> g_handles;
+static std::unordered_map<int64_t, ConversationHandle> g_conversations;
 static int64_t g_next_handle = 1;
 #endif
 
@@ -153,6 +160,89 @@ static nemo_speech_diar_model* make_model(
     auto st = nemo_speech_diar_create(&cfg, &model);
     if (st != NEMO_SPEECH_ASR_OK) return nullptr;
     return model;
+}
+#endif
+
+
+#if HAS_NEMO_SPEECH
+static std::string json_escape(const char* src) {
+    if (!src) return "";
+    std::string out;
+    for (const unsigned char ch : std::string(src)) {
+        switch (ch) {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default:
+                if (ch >= 0x20) out += static_cast<char>(ch);
+        }
+    }
+    return out;
+}
+
+static std::string asr_result_json(const nemo_speech_asr_result* result) {
+    if (!result) return "{\"pending\":true}";
+
+    const size_t alternatives = nemo_speech_asr_result_alternative_count(result);
+    const char* transcript = alternatives ? nemo_speech_asr_result_transcript(result, 0) : "";
+    const float confidence = alternatives ? nemo_speech_asr_result_confidence(result, 0) : 0.0f;
+    const bool is_final = nemo_speech_asr_result_is_final(result);
+    const float processed = nemo_speech_asr_result_audio_processed(result);
+
+    std::ostringstream os;
+    os << "{\"final\":" << (is_final ? "true" : "false")
+       << ",\"audioProcessed\":" << std::fixed << std::setprecision(3) << processed
+       << ",\"confidence\":" << std::setprecision(4) << confidence
+       << ",\"text\":\"" << json_escape(transcript) << "\""
+       << ",\"words\":[";
+
+    if (alternatives) {
+        const size_t count = nemo_speech_asr_result_word_count(result, 0);
+        for (size_t i = 0; i < count; ++i) {
+            if (i) os << ",";
+            os << "{\"text\":\""
+               << json_escape(nemo_speech_asr_result_word_text(result, 0, i))
+               << "\",\"startMs\":" << nemo_speech_asr_result_word_start_time(result, 0, i)
+               << ",\"endMs\":" << nemo_speech_asr_result_word_end_time(result, 0, i)
+               << ",\"speaker\":" << nemo_speech_asr_result_word_speaker_tag(result, 0, i)
+               << ",\"confidence\":" << std::setprecision(4)
+               << nemo_speech_asr_result_word_confidence(result, 0, i)
+               << "}";
+        }
+    }
+    os << "]}";
+    return os.str();
+}
+
+static nemo_speech_asr_recognizer* make_asr_recognizer(
+    const std::string& asrPath,
+    const std::string& diarPath
+) {
+    nemo_speech_asr_backend_config backend{};
+    backend.size = sizeof(backend);
+    backend.gpu = -1;
+
+    nemo_speech_asr_model_config model{};
+    model.size = sizeof(model);
+    model.path = asrPath.c_str();
+    model.name = "nemotron-mobile-asr";
+
+    nemo_speech_asr_diar_config diar{};
+    diar.size = sizeof(diar);
+    diar.model_path = diarPath.c_str();
+    diar.left_context_frames = -1;
+
+    nemo_speech_asr_recognizer_config cfg{};
+    cfg.size = sizeof(cfg);
+    cfg.backend = &backend;
+    cfg.model = &model;
+    cfg.diar = &diar;
+
+    nemo_speech_asr_recognizer* recognizer = nullptr;
+    const auto st = nemo_speech_asr_create(&cfg, &recognizer);
+    return st == NEMO_SPEECH_ASR_OK ? recognizer : nullptr;
 }
 #endif
 
@@ -371,6 +461,226 @@ Java_local_nemotron_diarization_NativeDiarizer_analyzeWav(
 
     } catch (const std::exception& e) {
         std::string msg = std::string("{\"error\":\"") + e.what() + "\"}";
+        return env->NewStringUTF(msg.c_str());
+    }
+#endif
+}
+
+
+extern "C"
+JNIEXPORT jlong JNICALL
+Java_local_nemotron_diarization_NativeDiarizer_createConversation(
+    JNIEnv* env,
+    jclass,
+    jstring asrPathJ,
+    jstring diarPathJ,
+    jstring languageJ
+) {
+#if !HAS_NEMO_SPEECH
+    return 0;
+#else
+    const char* ap = env->GetStringUTFChars(asrPathJ, nullptr);
+    const char* dp = env->GetStringUTFChars(diarPathJ, nullptr);
+    const char* lp = env->GetStringUTFChars(languageJ, nullptr);
+    std::string asrPath(ap), diarPath(dp), language(lp);
+    env->ReleaseStringUTFChars(asrPathJ, ap);
+    env->ReleaseStringUTFChars(diarPathJ, dp);
+    env->ReleaseStringUTFChars(languageJ, lp);
+
+    auto* recognizer = make_asr_recognizer(asrPath, diarPath);
+    if (!recognizer) return 0;
+
+    auto options = nemo_speech_asr_recognition_options_default();
+    options.language_code = language.empty() ? "auto" : language.c_str();
+    options.interim_results = true;
+    options.enable_word_time_offsets = true;
+    options.enable_automatic_punctuation = true;
+    options.enable_speaker_diarization = true;
+    options.max_speaker_count = 8;
+
+    nemo_speech_asr_stream* stream = nullptr;
+    auto st = nemo_speech_asr_streaming_recognize(recognizer, &options, &stream);
+    if (st != NEMO_SPEECH_ASR_OK) {
+        nemo_speech_asr_destroy(recognizer);
+        return 0;
+    }
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    const int64_t id = g_next_handle++;
+    g_conversations[id] = {recognizer, stream};
+    return static_cast<jlong>(id);
+#endif
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_local_nemotron_diarization_NativeDiarizer_pushConversation(
+    JNIEnv* env,
+    jclass,
+    jlong handle,
+    jshortArray pcmJ,
+    jint sampleRate
+) {
+#if !HAS_NEMO_SPEECH
+    return env->NewStringUTF("{\"error\":\"NeMo-Speech.cpp not linked\"}");
+#else
+    ConversationHandle h{};
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        auto it = g_conversations.find(handle);
+        if (it == g_conversations.end())
+            return env->NewStringUTF("{\"error\":\"Invalid conversation handle\"}");
+        h = it->second;
+    }
+
+    const jsize n = env->GetArrayLength(pcmJ);
+    jshort* pcm = env->GetShortArrayElements(pcmJ, nullptr);
+    std::vector<float> samples(n);
+    for (jsize i = 0; i < n; ++i) samples[i] = pcm[i] / 32768.0f;
+    env->ReleaseShortArrayElements(pcmJ, pcm, JNI_ABORT);
+
+    auto st = nemo_speech_asr_stream_push_f32(
+        h.stream, samples.data(), samples.size(), sampleRate
+    );
+    if (st != NEMO_SPEECH_ASR_OK) {
+        auto e = last_error_json();
+        return env->NewStringUTF(e.c_str());
+    }
+
+    std::string latest = "{\"pending\":true}";
+    for (int i = 0; i < 8; ++i) {
+        nemo_speech_asr_result* result = nullptr;
+        st = nemo_speech_asr_stream_next(h.stream, &result);
+        if (st != NEMO_SPEECH_ASR_OK) {
+            auto e = last_error_json();
+            return env->NewStringUTF(e.c_str());
+        }
+        if (!result) break;
+        latest = asr_result_json(result);
+        nemo_speech_asr_result_destroy(result);
+    }
+    return env->NewStringUTF(latest.c_str());
+#endif
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_local_nemotron_diarization_NativeDiarizer_finishConversation(
+    JNIEnv* env,
+    jclass,
+    jlong handle
+) {
+#if !HAS_NEMO_SPEECH
+    return env->NewStringUTF("{\"error\":\"NeMo-Speech.cpp not linked\"}");
+#else
+    ConversationHandle h{};
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        auto it = g_conversations.find(handle);
+        if (it == g_conversations.end())
+            return env->NewStringUTF("{\"error\":\"Invalid conversation handle\"}");
+        h = it->second;
+    }
+
+    auto st = nemo_speech_asr_stream_finish(h.stream);
+    if (st != NEMO_SPEECH_ASR_OK) {
+        auto e = last_error_json();
+        return env->NewStringUTF(e.c_str());
+    }
+
+    std::string latest = "{\"pending\":true}";
+    for (int i = 0; i < 64; ++i) {
+        nemo_speech_asr_result* result = nullptr;
+        st = nemo_speech_asr_stream_next(h.stream, &result);
+        if (st != NEMO_SPEECH_ASR_OK) {
+            auto e = last_error_json();
+            return env->NewStringUTF(e.c_str());
+        }
+        if (!result) break;
+        latest = asr_result_json(result);
+        nemo_speech_asr_result_destroy(result);
+    }
+    return env->NewStringUTF(latest.c_str());
+#endif
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_local_nemotron_diarization_NativeDiarizer_closeConversation(
+    JNIEnv*,
+    jclass,
+    jlong handle
+) {
+#if HAS_NEMO_SPEECH
+    ConversationHandle h{};
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        auto it = g_conversations.find(handle);
+        if (it == g_conversations.end()) return;
+        h = it->second;
+        g_conversations.erase(it);
+    }
+    nemo_speech_asr_stream_close(h.stream);
+    nemo_speech_asr_destroy(h.recognizer);
+#endif
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_local_nemotron_diarization_NativeDiarizer_transcribeWav(
+    JNIEnv* env,
+    jclass,
+    jstring asrPathJ,
+    jstring diarPathJ,
+    jstring wavPathJ,
+    jstring languageJ
+) {
+#if !HAS_NEMO_SPEECH
+    return env->NewStringUTF("{\"error\":\"NeMo-Speech.cpp not linked\"}");
+#else
+    const char* ap = env->GetStringUTFChars(asrPathJ, nullptr);
+    const char* dp = env->GetStringUTFChars(diarPathJ, nullptr);
+    const char* wp = env->GetStringUTFChars(wavPathJ, nullptr);
+    const char* lp = env->GetStringUTFChars(languageJ, nullptr);
+    std::string asrPath(ap), diarPath(dp), wavPath(wp), language(lp);
+    env->ReleaseStringUTFChars(asrPathJ, ap);
+    env->ReleaseStringUTFChars(diarPathJ, dp);
+    env->ReleaseStringUTFChars(wavPathJ, wp);
+    env->ReleaseStringUTFChars(languageJ, lp);
+
+    try {
+        WavData wav = load_wav(wavPath);
+        auto* recognizer = make_asr_recognizer(asrPath, diarPath);
+        if (!recognizer) {
+            auto e = last_error_json();
+            return env->NewStringUTF(e.c_str());
+        }
+
+        auto options = nemo_speech_asr_recognition_options_default();
+        options.language_code = language.empty() ? "auto" : language.c_str();
+        options.enable_word_time_offsets = true;
+        options.enable_automatic_punctuation = true;
+        options.enable_speaker_diarization = true;
+        options.max_speaker_count = 8;
+
+        nemo_speech_asr_result* result = nullptr;
+        const auto st = nemo_speech_asr_recognize_f32(
+            recognizer, &options, wav.samples.data(), wav.samples.size(),
+            wav.sample_rate, &result
+        );
+
+        if (st != NEMO_SPEECH_ASR_OK || !result) {
+            auto e = last_error_json();
+            nemo_speech_asr_destroy(recognizer);
+            return env->NewStringUTF(e.c_str());
+        }
+
+        const std::string out = asr_result_json(result);
+        nemo_speech_asr_result_destroy(result);
+        nemo_speech_asr_destroy(recognizer);
+        return env->NewStringUTF(out.c_str());
+    } catch (const std::exception& e) {
+        std::string msg = std::string("{\"error\":\"") + json_escape(e.what()) + "\"}";
         return env->NewStringUTF(msg.c_str());
     }
 #endif
