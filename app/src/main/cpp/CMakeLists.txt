@@ -8,22 +8,30 @@ set(NEMO_SDK_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/nemo-sdk"
     CACHE PATH "Staged NeMo-Speech.cpp SDK")
 
-if(EXISTS "${NEMO_SDK_DIR}/lib/cmake/NeMoSpeech/NeMoSpeechConfig.cmake")
-    message(STATUS "Using staged NeMoSpeech SDK: ${NEMO_SDK_DIR}")
+set(NEMO_ASR_C_LIB "${NEMO_SDK_DIR}/lib/libnemo_speech_asr_c.so")
 
-    find_package(
-        NeMoSpeech CONFIG REQUIRED COMPONENTS Diarization
-        PATHS "${NEMO_SDK_DIR}/lib/cmake/NeMoSpeech"
-        NO_DEFAULT_PATH
+if(EXISTS "${NEMO_ASR_C_LIB}")
+    message(STATUS "Using staged NeMo-Speech C ABI: ${NEMO_ASR_C_LIB}")
+
+    add_library(nemo_speech_asr_c SHARED IMPORTED)
+    set_target_properties(nemo_speech_asr_c PROPERTIES
+        IMPORTED_LOCATION "${NEMO_ASR_C_LIB}"
+        INTERFACE_INCLUDE_DIRECTORIES "${NEMO_SDK_DIR}/include"
+    )
+
+    target_include_directories(
+        nemotron_android
+        PRIVATE
+        "${NEMO_SDK_DIR}/include"
     )
 
     target_link_libraries(
         nemotron_android
         PRIVATE
-        NeMoSpeech::Diarization
+        nemo_speech_asr_c
         ${log-lib}
     )
 else()
-    message(WARNING "NeMoSpeech Android SDK not found; JNI stub only.")
+    message(WARNING "NeMo-Speech Android SDK not found; JNI stub only.")
     target_link_libraries(nemotron_android PRIVATE ${log-lib})
 endif()
