@@ -111,7 +111,7 @@ static WavData load_wav(const std::string& path) {
 static std::string last_error_json() {
     const char* err = nemo_speech_asr_last_error();
     std::string e = err ? err : "Unknown NeMo-Speech error";
-    for (char& c : e) if (c == '"') c = ''';
+    for (char& c : e) if (c == '"') c = '\'';
     return "{\"error\":\"" + e + "\"}";
 }
 
