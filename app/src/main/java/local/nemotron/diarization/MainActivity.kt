@@ -71,6 +71,14 @@ class MainActivity : AppCompatActivity() {
                 diarModelFile = withContext(Dispatchers.IO) {
                     copyUri(uri, "nemotron3-diarization.gguf")
                 }
+                val size = diarModelFile!!.length()
+                if (size > 250L * 1024L * 1024L) {
+                    diarModelFile?.delete()
+                    diarModelFile = null
+                    updateModelLabels()
+                    setBusy(false, "Wrong model selected: diarization Q8 should be about 102 MB, not 700+ MB")
+                    return@launch
+                }
                 updateModelLabels()
                 setBusy(false, "Diarization model ready")
             }
@@ -83,6 +91,14 @@ class MainActivity : AppCompatActivity() {
                 setBusy(true, "Copying ASR model… this can take a while")
                 asrModelFile = withContext(Dispatchers.IO) {
                     copyUri(uri, "nemotron35-asr.gguf")
+                }
+                val size = asrModelFile!!.length()
+                if (size < 400L * 1024L * 1024L) {
+                    asrModelFile?.delete()
+                    asrModelFile = null
+                    updateModelLabels()
+                    setBusy(false, "Wrong model selected: Nemotron 3.5 ASR Q8 should be about 708 MiB")
+                    return@launch
                 }
                 updateModelLabels()
                 setBusy(false, "Speech recognition model ready")
