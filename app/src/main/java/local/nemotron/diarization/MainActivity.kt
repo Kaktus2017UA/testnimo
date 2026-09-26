@@ -3,26 +3,28 @@ package local.nemotron.diarization
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.style.ForegroundColorSpan
 import android.view.View
+import android.view.ViewGroup
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import local.nemotron.diarization.databinding.ActivityMainBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import local.nemotron.diarization.databinding.ActivityMainBinding
 import org.json.JSONObject
 import java.io.File
 
@@ -30,24 +32,30 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var b: ActivityMainBinding
 
-    private var modelFile: File? = null
+    private var diarModelFile: File? = null
+    private var asrModelFile: File? = null
     private var audioFile: File? = null
 
     private var audioRecord: AudioRecord? = null
     private var recordJob: Job? = null
     private var nativeHandle: Long = 0L
+    private var lastRenderedText = ""
 
     private val sampleRate = 16_000
+    private val languageCode = "auto"
 
     private val speakerColors = intArrayOf(
-        Color.rgb(33, 150, 243),
-        Color.rgb(244, 67, 54),
-        Color.rgb(76, 175, 80),
-        Color.rgb(156, 39, 176),
-        Color.rgb(255, 152, 0),
-        Color.rgb(0, 150, 136),
-        Color.rgb(121, 85, 72),
-        Color.rgb(63, 81, 181)
+        Color.rgb(37, 99, 235), Color.rgb(219, 39, 119),
+        Color.rgb(5, 150, 105), Color.rgb(124, 58, 237),
+        Color.rgb(234, 88, 12), Color.rgb(8, 145, 178),
+        Color.rgb(79, 70, 229), Color.rgb(190, 24, 93)
+    )
+
+    private val speakerBackgrounds = intArrayOf(
+        Color.rgb(239, 246, 255), Color.rgb(253, 242, 248),
+        Color.rgb(236, 253, 245), Color.rgb(245, 243, 255),
+        Color.rgb(255, 247, 237), Color.rgb(236, 254, 255),
+        Color.rgb(238, 242, 255), Color.rgb(255, 241, 242)
     )
 
     private val askMic =
@@ -55,18 +63,29 @@ class MainActivity : AppCompatActivity() {
             if (granted) startLive() else b.txtStatus.text = "Microphone permission denied"
         }
 
-    private val pickModel =
+    private val pickDiarModel =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             uri ?: return@registerForActivityResult
             lifecycleScope.launch {
-                setBusy(true, "Copying model locally…")
-                modelFile = withContext(Dispatchers.IO) {
+                setBusy(true, "Copying diarization model…")
+                diarModelFile = withContext(Dispatchers.IO) {
                     copyUri(uri, "nemotron3-diarization.gguf")
                 }
-                b.txtModel.text =
-                    "Model: ${modelFile!!.name} • ${modelFile!!.length() / 1024 / 1024} MB"
-                setBusy(false, "Model ready")
-                updateButtons()
+                updateModelLabels()
+                setBusy(false, "Diarization model ready")
+            }
+        }
+
+    private val pickAsrModel =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri ?: return@registerForActivityResult
+            lifecycleScope.launch {
+                setBusy(true, "Copying ASR model… this can take a while")
+                asrModelFile = withContext(Dispatchers.IO) {
+                    copyUri(uri, "nemotron35-asr.gguf")
+                }
+                updateModelLabels()
+                setBusy(false, "Speech recognition model ready")
             }
         }
 
@@ -75,12 +94,9 @@ class MainActivity : AppCompatActivity() {
             uri ?: return@registerForActivityResult
             lifecycleScope.launch {
                 setBusy(true, "Copying audio locally…")
-                audioFile = withContext(Dispatchers.IO) {
-                    copyUri(uri, "input.wav")
-                }
-                b.txtAudio.text = "Audio: ${audioFile!!.name}"
+                audioFile = withContext(Dispatchers.IO) { copyUri(uri, "input.wav") }
+                b.txtAudio.text = "Selected: ${audioFile!!.name} • ${formatSize(audioFile!!.length())}"
                 setBusy(false, "Audio ready")
-                updateButtons()
             }
         }
 
@@ -89,28 +105,56 @@ class MainActivity : AppCompatActivity() {
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
 
-        val runtime = runCatching { NativeDiarizer.runtimeAvailable() }.getOrDefault(false)
-        b.txtRuntime.text =
-            if (runtime) "Native runtime: READY"
-            else "Native runtime: NOT LINKED — see README"
+        restoreLocalFiles()
 
-        b.btnModel.setOnClickListener { pickModel.launch(arrayOf("*/*")) }
+        val runtime = runCatching { NativeDiarizer.runtimeAvailable() }.getOrDefault(false)
+        b.txtRuntime.text = if (runtime) "● Native runtime ready" else "● Native runtime unavailable"
+        b.txtRuntime.setTextColor(
+            if (runtime) Color.rgb(22, 101, 52) else Color.rgb(185, 28, 28)
+        )
+
+        b.btnDiarModel.setOnClickListener { pickDiarModel.launch(arrayOf("*/*")) }
+        b.btnAsrModel.setOnClickListener { pickAsrModel.launch(arrayOf("*/*")) }
         b.btnAudio.setOnClickListener { pickAudio.launch(arrayOf("audio/wav", "audio/*")) }
 
         b.btnRecord.setOnClickListener {
-            if (recordJob != null) stopLive()
-            else ensureMicAndStart()
+            if (recordJob != null) stopLive() else ensureMicAndStart()
         }
 
         b.btnAnalyze.setOnClickListener { analyzeFile() }
-        b.btnClear.setOnClickListener { b.txtResult.text = "" }
+        b.btnClear.setOnClickListener { clearTranscript() }
+
+        updateModelLabels()
+        updateButtons()
+    }
+
+    private fun restoreLocalFiles() {
+        File(filesDir, "nemotron3-diarization.gguf").takeIf { it.exists() && it.length() > 0 }
+            ?.let { diarModelFile = it }
+        File(filesDir, "nemotron35-asr.gguf").takeIf { it.exists() && it.length() > 0 }
+            ?.let { asrModelFile = it }
+        File(filesDir, "input.wav").takeIf { it.exists() && it.length() > 0 }
+            ?.let {
+                audioFile = it
+                b.txtAudio.text = "Selected: ${it.name} • ${formatSize(it.length())}"
+            }
+    }
+
+    private fun updateModelLabels() {
+        b.txtDiarModel.text = diarModelFile?.let {
+            "Ready • ${formatSize(it.length())}"
+        } ?: "Not selected"
+
+        b.txtAsrModel.text = asrModelFile?.let {
+            "Ready • ${formatSize(it.length())} • language: auto"
+        } ?: "Not selected • Nemotron 3.5 ASR Q8 recommended"
 
         updateButtons()
     }
 
     private fun ensureMicAndStart() {
-        if (modelFile == null) {
-            b.txtStatus.text = "Choose the GGUF model first"
+        if (diarModelFile == null || asrModelFile == null) {
+            b.txtStatus.text = "Choose both Diarization and ASR GGUF models first"
             return
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
@@ -123,62 +167,66 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startLive() {
-        val model = modelFile ?: return
+        val diar = diarModelFile ?: return
+        val asr = asrModelFile ?: return
         if (recordJob != null) return
 
-        val min = AudioRecord.getMinBufferSize(
-            sampleRate,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT
-        )
-        val bufferSize = maxOf(min * 2, 4096)
+        setBusy(true, "Loading ASR + diarization models…")
 
-        val recorder = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_RECOGNITION,
-            sampleRate,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-            bufferSize
-        )
+        lifecycleScope.launch {
+            val handle = withContext(Dispatchers.Default) {
+                runCatching {
+                    NativeDiarizer.createConversation(
+                        asr.absolutePath, diar.absolutePath, languageCode
+                    )
+                }.getOrDefault(0L)
+            }
 
-        if (recorder.state != AudioRecord.STATE_INITIALIZED) {
-            b.txtStatus.text = "Cannot initialize microphone"
-            recorder.release()
-            return
-        }
+            if (handle == 0L) {
+                setBusy(false, "Could not load conversation models")
+                return@launch
+            }
 
-        val handle = runCatching {
-            NativeDiarizer.create(model.absolutePath, "v3-streaming")
-        }.getOrElse {
-            b.txtStatus.text = it.message ?: "Failed to create diarizer"
-            recorder.release()
-            return
-        }
+            val min = AudioRecord.getMinBufferSize(
+                sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
+            )
+            val bufferSize = maxOf(min * 2, 8192)
 
-        if (handle == 0L) {
-            b.txtStatus.text = "Native diarizer could not be created"
-            recorder.release()
-            return
-        }
+            val recorder = AudioRecord(
+                MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+                bufferSize
+            )
 
-        nativeHandle = handle
-        audioRecord = recorder
-        recorder.startRecording()
+            if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+                NativeDiarizer.closeConversation(handle)
+                recorder.release()
+                setBusy(false, "Cannot initialize microphone")
+                return@launch
+            }
 
-        b.chronometer.base = SystemClock.elapsedRealtime()
-        b.chronometer.start()
-        b.btnRecord.text = "Stop live diarization"
-        b.txtStatus.text = "Listening locally…"
+            nativeHandle = handle
+            audioRecord = recorder
+            recorder.startRecording()
 
-        recordJob = lifecycleScope.launch(Dispatchers.IO) {
-            val buffer = ShortArray(2048)
-            while (isActive) {
-                val n = recorder.read(buffer, 0, buffer.size)
-                if (n > 0) {
-                    val chunk = if (n == buffer.size) buffer else buffer.copyOf(n)
-                    val json = NativeDiarizer.pushPcm16(handle, chunk, sampleRate)
-                    if (json.isNotBlank()) {
-                        withContext(Dispatchers.Main) { renderSegments(json, replace = true) }
+            clearTranscript()
+            b.chronometer.base = SystemClock.elapsedRealtime()
+            b.chronometer.start()
+            b.btnRecord.text = "Stop recording"
+            b.txtStatus.text = "Listening • transcribing locally"
+            b.progress.visibility = View.GONE
+            updateButtons(true)
+
+            recordJob = lifecycleScope.launch(Dispatchers.IO) {
+                val buffer = ShortArray(4096)
+                while (isActive) {
+                    val n = recorder.read(buffer, 0, buffer.size)
+                    if (n > 0) {
+                        val chunk = if (n == buffer.size) buffer else buffer.copyOf(n)
+                        val json = NativeDiarizer.pushConversation(handle, chunk, sampleRate)
+                        withContext(Dispatchers.Main) { renderConversation(json) }
                     }
                 }
             }
@@ -195,8 +243,9 @@ class MainActivity : AppCompatActivity() {
         audioRecord = null
 
         b.chronometer.stop()
-        b.btnRecord.text = "Start live diarization"
-        b.txtStatus.text = "Finalizing…"
+        b.btnRecord.text = "Start live transcript"
+        b.txtStatus.text = "Finalizing transcript…"
+        b.progress.visibility = View.VISIBLE
 
         val h = nativeHandle
         nativeHandle = 0L
@@ -204,80 +253,147 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val json = withContext(Dispatchers.Default) {
                 try {
-                    NativeDiarizer.finish(h)
+                    NativeDiarizer.finishConversation(h)
                 } finally {
-                    NativeDiarizer.close(h)
+                    NativeDiarizer.closeConversation(h)
                 }
             }
-            renderSegments(json, replace = true)
-            b.txtStatus.text = "Live diarization complete"
+            renderConversation(json)
+            b.progress.visibility = View.GONE
+            b.txtStatus.text = "Transcript complete • processed locally"
+            updateButtons()
         }
     }
 
     private fun analyzeFile() {
-        val model = modelFile ?: return
+        val diar = diarModelFile ?: return
+        val asr = asrModelFile ?: return
         val audio = audioFile ?: return
-        val fullAttention = b.radioOffline.isChecked
 
         lifecycleScope.launch {
-            setBusy(true, if (fullAttention) "Running full-attention diarization…"
-            else "Running streaming diarization…")
-
+            clearTranscript()
+            setBusy(true, "Transcribing and identifying speakers…")
             val json = withContext(Dispatchers.Default) {
-                NativeDiarizer.analyzeWav(
-                    model.absolutePath,
-                    audio.absolutePath,
-                    fullAttention
+                NativeDiarizer.transcribeWav(
+                    asr.absolutePath, diar.absolutePath, audio.absolutePath, languageCode
                 )
             }
-
-            renderSegments(json, replace = true)
-            setBusy(false, "Analysis complete")
+            renderConversation(json)
+            setBusy(false, "File analysis complete")
         }
     }
 
-    private fun renderSegments(json: String, replace: Boolean) {
+    private fun renderConversation(json: String) {
         val root = runCatching { JSONObject(json) }.getOrElse {
-            b.txtResult.text = json
+            b.txtStatus.text = json
             return
         }
 
         if (root.has("error")) {
-            b.txtResult.text = root.getString("error")
+            b.txtStatus.text = root.optString("error", "Unknown native error")
+            return
+        }
+        if (root.optBoolean("pending", false)) return
+
+        val fullText = root.optString("text", "").trim()
+        val words = root.optJSONArray("words") ?: return
+        if (fullText == lastRenderedText && words.length() > 0) return
+        lastRenderedText = fullText
+
+        b.transcriptContainer.removeAllViews()
+
+        if (words.length() == 0) {
+            b.txtEmptyTranscript.visibility = View.VISIBLE
+            b.txtTranscriptSummary.text = fullText
             return
         }
 
-        val arr = root.optJSONArray("segments") ?: return
-        val out = SpannableStringBuilder()
-
-        for (i in 0 until arr.length()) {
-            val s = arr.getJSONObject(i)
-            val speaker = s.optInt("speaker", 1)
-            val start = s.optDouble("start", 0.0)
-            val end = s.optDouble("end", 0.0)
-            val line = "%s–%s   Speaker %d\n".format(
-                time(start), time(end), speaker
-            )
-            val startIndex = out.length
-            out.append(line)
-            val color = speakerColors[(speaker - 1).coerceIn(0, 7)]
-            out.setSpan(
-                ForegroundColorSpan(color),
-                startIndex,
-                out.length,
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
+        b.txtEmptyTranscript.visibility = View.GONE
+        val confidence = root.optDouble("confidence", 0.0)
+        val final = root.optBoolean("final", false)
+        b.txtTranscriptSummary.text = buildString {
+            append(if (final) "Final transcript" else "Live transcript")
+            if (confidence > 0.0) append(" • ${(confidence * 100).toInt()}% confidence")
+            append(" • speaker-aware")
         }
 
-        if (replace) b.txtResult.text = out else b.txtResult.append(out)
+        data class Utterance(
+            val speaker: Int,
+            val startMs: Int,
+            var endMs: Int,
+            val words: MutableList<String>
+        )
+
+        val groups = mutableListOf<Utterance>()
+        for (i in 0 until words.length()) {
+            val w = words.getJSONObject(i)
+            val speaker = w.optInt("speaker", 0)
+            val text = w.optString("text", "").trim()
+            if (text.isEmpty()) continue
+            val start = w.optInt("startMs", 0)
+            val end = w.optInt("endMs", start)
+
+            val last = groups.lastOrNull()
+            if (last != null && last.speaker == speaker) {
+                last.words += text
+                last.endMs = end
+            } else {
+                groups += Utterance(speaker, start, end, mutableListOf(text))
+            }
+        }
+
+        groups.forEach {
+            addSpeakerBubble(it.speaker, it.startMs, it.endMs, it.words.joinToString(" "))
+        }
     }
 
-    private fun time(sec: Double): String {
-        val totalMs = (sec * 1000.0).toLong().coerceAtLeast(0)
-        val min = totalMs / 60_000
-        val s = (totalMs % 60_000) / 1000
-        val ms = totalMs % 1000
-        return "%02d:%02d.%03d".format(min, s, ms)
+    private fun addSpeakerBubble(speaker: Int, startMs: Int, endMs: Int, text: String) {
+        val safeSpeaker = if (speaker <= 0) 1 else speaker
+        val index = (safeSpeaker - 1).coerceIn(0, speakerColors.lastIndex)
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(16).toFloat()
+                setColor(speakerBackgrounds[index])
+                setStroke(dp(1), withAlpha(speakerColors[index], 60))
+            }
+        }
+
+        card.layoutParams = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply {
+            bottomMargin = dp(10)
+            if (safeSpeaker % 2 == 0) leftMargin = dp(34) else rightMargin = dp(34)
+        }
+
+        val header = TextView(this).apply {
+            setTextColor(speakerColors[index])
+            setTypeface(typeface, Typeface.BOLD)
+            textSize = 13f
+            text = "Speaker \$safeSpeaker   ${formatTime(startMs)}–${formatTime(endMs)}"
+        }
+
+        val body = TextView(this).apply {
+            setTextColor(Color.rgb(17, 24, 39))
+            textSize = 17f
+            setLineSpacing(0f, 1.12f)
+            this.text = text
+            setPadding(0, dp(6), 0, 0)
+        }
+
+        card.addView(header)
+        card.addView(body)
+        b.transcriptContainer.addView(card)
+    }
+
+    private fun clearTranscript() {
+        lastRenderedText = ""
+        b.transcriptContainer.removeAllViews()
+        b.txtTranscriptSummary.text = ""
+        b.txtEmptyTranscript.visibility = View.VISIBLE
     }
 
     private fun setBusy(busy: Boolean, status: String) {
@@ -287,9 +403,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateButtons(enabled: Boolean = true) {
-        b.btnAnalyze.isEnabled = enabled && modelFile != null && audioFile != null
-        b.btnRecord.isEnabled = enabled && modelFile != null
-        b.btnModel.isEnabled = enabled
+        val modelsReady = diarModelFile != null && asrModelFile != null
+        b.btnAnalyze.isEnabled = enabled && modelsReady && audioFile != null
+        b.btnRecord.isEnabled = enabled && modelsReady
+        b.btnDiarModel.isEnabled = enabled
+        b.btnAsrModel.isEnabled = enabled
         b.btnAudio.isEnabled = enabled
     }
 
@@ -301,6 +419,22 @@ class MainActivity : AppCompatActivity() {
         }
         return out
     }
+
+    private fun formatSize(bytes: Long): String {
+        val mb = bytes / 1024.0 / 1024.0
+        return if (mb >= 1024) "%.2f GB".format(mb / 1024.0) else "%.0f MB".format(mb)
+    }
+
+    private fun formatTime(ms: Int): String {
+        val safe = ms.coerceAtLeast(0)
+        val totalSeconds = safe / 1000
+        return "%02d:%02d".format(totalSeconds / 60, totalSeconds % 60)
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun withAlpha(color: Int, alpha: Int): Int =
+        Color.argb(alpha.coerceIn(0, 255), Color.red(color), Color.green(color), Color.blue(color))
 
     override fun onDestroy() {
         if (recordJob != null) stopLive()
