@@ -6,6 +6,7 @@ plugins {
 android {
     namespace = "local.nemotron.diarization"
     compileSdk = 35
+    ndkVersion = "27.2.12479018"
 
     defaultConfig {
         applicationId = "local.nemotron.diarization"
