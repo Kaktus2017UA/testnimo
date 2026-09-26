@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:fillViewport="true"
+    android:background="#F6F7FB">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -11,138 +13,258 @@
         android:padding="18dp">
 
         <TextView
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Nemotron 3 Diarization"
-            android:textSize="27sp"
+            android:text="Conversation Intelligence"
+            android:textColor="#111827"
+            android:textSize="28sp"
             android:textStyle="bold"/>
 
         <TextView
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Local speaker diarization • no cloud"
+            android:text="100% local • transcript + speaker detection"
+            android:textColor="#6B7280"
             android:textSize="15sp"/>
 
-        <TextView
-            android:id="@+id/txtRuntime"
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
-            android:text="Checking native runtime…"
-            android:textStyle="bold"/>
+            app:cardCornerRadius="16dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#E5E7EB"
+            app:strokeWidth="1dp">
 
-        <Button
-            android:id="@+id/btnModel"
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/txtRuntime"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Checking native runtime…"
+                    android:textColor="#166534"
+                    android:textStyle="bold"/>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="Diarization model"
+                    android:textColor="#111827"
+                    android:textStyle="bold"/>
+
+                <TextView
+                    android:id="@+id/txtDiarModel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="Not selected"
+                    android:textColor="#6B7280"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnDiarModel"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Choose Nemotron 3 Diarization GGUF"/>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="Speech recognition model"
+                    android:textColor="#111827"
+                    android:textStyle="bold"/>
+
+                <TextView
+                    android:id="@+id/txtAsrModel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="Not selected • Nemotron 3.5 ASR Q8 recommended"
+                    android:textColor="#6B7280"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAsrModel"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Choose ASR GGUF"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="Choose Nemotron GGUF model"/>
+            android:layout_marginTop="14dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#E5E7EB"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Live conversation"
+                    android:textColor="#111827"
+                    android:textSize="18sp"
+                    android:textStyle="bold"/>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="Words are transcribed and assigned to speakers locally"
+                    android:textColor="#6B7280"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnRecord"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:layout_marginTop="14dp"
+                    android:text="Start live transcript"
+                    android:textSize="16sp"
+                    app:cornerRadius="14dp"/>
+
+                <Chronometer
+                    android:id="@+id/chronometer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginTop="10dp"
+                    android:textColor="#111827"
+                    android:textSize="24sp"
+                    android:textStyle="bold"/>
+
+                <TextView
+                    android:id="@+id/txtStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Ready"
+                    android:textColor="#6B7280"/>
+
+                <ProgressBar
+                    android:id="@+id/progress"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:indeterminate="true"
+                    android:visibility="gone"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#E5E7EB"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Audio file"
+                    android:textColor="#111827"
+                    android:textSize="18sp"
+                    android:textStyle="bold"/>
+
+                <TextView
+                    android:id="@+id/txtAudio"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="No WAV selected"
+                    android:textColor="#6B7280"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAudio"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="Choose WAV file"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAnalyze"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:enabled="false"
+                    android:text="Transcribe + identify speakers"
+                    app:cornerRadius="12dp"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
         <TextView
-            android:id="@+id/txtModel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="No model selected"/>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="22dp"
-            android:text="LIVE MICROPHONE"
+            android:layout_marginTop="20dp"
+            android:text="Transcript"
+            android:textColor="#111827"
+            android:textSize="20sp"
             android:textStyle="bold"/>
 
-        <Button
-            android:id="@+id/btnRecord"
+        <TextView
+            android:id="@+id/txtTranscriptSummary"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Start live diarization"/>
+            android:layout_marginTop="4dp"
+            android:text=""
+            android:textColor="#6B7280"
+            android:textSize="14sp"/>
 
-        <Chronometer
-            android:id="@+id/chronometer"
+        <TextView
+            android:id="@+id/txtEmptyTranscript"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="center"
+            android:padding="24dp"
+            android:text="Start recording or select a WAV file.\nYour local transcript will appear here."
+            android:textColor="#9CA3AF"/>
+
+        <LinearLayout
+            android:id="@+id/transcriptContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="vertical"/>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnClear"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
+            android:layout_gravity="end"
             android:layout_marginTop="8dp"
-            android:textSize="20sp"/>
+            android:text="Clear transcript"/>
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="22dp"
-            android:text="AUDIO FILE"
-            android:textStyle="bold"/>
-
-        <Button
-            android:id="@+id/btnAudio"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Choose WAV file"/>
-
-        <TextView
-            android:id="@+id/txtAudio"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="No audio selected"/>
-
-        <RadioGroup
-            android:id="@+id/modeGroup"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <RadioButton
-                android:id="@+id/radioStreaming"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:checked="true"
-                android:text="Streaming"/>
-
-            <RadioButton
-                android:id="@+id/radioOffline"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Full attention"/>
-        </RadioGroup>
-
-        <Button
-            android:id="@+id/btnAnalyze"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:enabled="false"
-            android:text="Analyze selected file"/>
-
-        <ProgressBar
-            android:id="@+id/progress"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:indeterminate="true"
-            android:visibility="gone"/>
-
-        <TextView
-            android:id="@+id/txtStatus"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="Ready"/>
-
-        <Button
-            android:id="@+id/btnClear"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:text="Clear results"/>
-
-        <TextView
-            android:id="@+id/txtResult"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:fontFamily="monospace"
-            android:textIsSelectable="true"
-            android:textSize="15sp"/>
-
+        <Space
+            android:layout_width="1dp"
+            android:layout_height="24dp"/>
     </LinearLayout>
 </ScrollView>
