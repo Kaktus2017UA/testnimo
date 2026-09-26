@@ -27,13 +27,19 @@ cmake -S "${WORK}/sentencepiece" -B "${WORK}/sentencepiece-build" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX="${WORK}/deps/sentencepiece"
 
-cmake --build "${WORK}/sentencepiece-build" --parallel
-cmake --install "${WORK}/sentencepiece-build"
+cmake --build "${WORK}/sentencepiece-build" --target sentencepiece-static --parallel
+
+mkdir -p "${WORK}/deps/sentencepiece/lib" "${WORK}/deps/sentencepiece/include"
+cp "${WORK}/sentencepiece-build/src/libsentencepiece.a"    "${WORK}/deps/sentencepiece/lib/libsentencepiece.a"
+cp "${WORK}/sentencepiece/src/sentencepiece_processor.h"    "${WORK}/deps/sentencepiece/include/"
+cp "${WORK}/sentencepiece/src/sentencepiece_model.pb.h"    "${WORK}/deps/sentencepiece/include/" 2>/dev/null || true
+cp "${WORK}/sentencepiece-build/src/builtin_pb/sentencepiece_model.pb.h"    "${WORK}/deps/sentencepiece/include/" 2>/dev/null || true
+cp "${WORK}/sentencepiece-build/src/builtin_pb/sentencepiece.pb.h"    "${WORK}/deps/sentencepiece/include/" 2>/dev/null || true
 
 SP_LIB="${WORK}/deps/sentencepiece/lib/libsentencepiece.a"
 SP_INC="${WORK}/deps/sentencepiece/include"
 
-test -f "${SP_LIB}" || { echo "Missing ${SP_LIB}"; find "${WORK}/deps/sentencepiece" -maxdepth 3 -type f | sort; exit 1; }
+test -f "${SP_LIB}" || { echo "Missing ${SP_LIB}"; exit 1; }
 test -f "${SP_INC}/sentencepiece_processor.h" || { echo "Missing SentencePiece headers"; exit 1; }
 
 git clone --recursive --depth 1 \
@@ -50,6 +56,7 @@ cmake -S "${WORK}/nemo-speech" -B "${WORK}/nemo-build" -G Ninja \
   -DCMAKE_PREFIX_PATH="${WORK}/deps/sentencepiece" \
   -DSENTENCEPIECE_STATIC_LIB="${SP_LIB}" \
   -DSENTENCEPIECE_INCLUDE_DIR="${SP_INC}" \
+  -DCMAKE_SHARED_LINKER_FLAGS="-llog" \
   -DNEMO_SPEECH_BUILD_ASR=OFF \
   -DNEMO_SPEECH_BUILD_DIAR=ON \
   -DNEMO_SPEECH_BUILD_TTS=OFF \
