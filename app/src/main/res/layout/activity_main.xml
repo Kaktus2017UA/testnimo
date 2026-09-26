@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Nemotron 3 Diarization"
+            android:textSize="27sp"
+            android:textStyle="bold"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Local speaker diarization • no cloud"
+            android:textSize="15sp"/>
+
+        <TextView
+            android:id="@+id/txtRuntime"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="Checking native runtime…"
+            android:textStyle="bold"/>
+
+        <Button
+            android:id="@+id/btnModel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Choose Nemotron GGUF model"/>
+
+        <TextView
+            android:id="@+id/txtModel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="No model selected"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:text="LIVE MICROPHONE"
+            android:textStyle="bold"/>
+
+        <Button
+            android:id="@+id/btnRecord"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Start live diarization"/>
+
+        <Chronometer
+            android:id="@+id/chronometer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="8dp"
+            android:textSize="20sp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:text="AUDIO FILE"
+            android:textStyle="bold"/>
+
+        <Button
+            android:id="@+id/btnAudio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Choose WAV file"/>
+
+        <TextView
+            android:id="@+id/txtAudio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="No audio selected"/>
+
+        <RadioGroup
+            android:id="@+id/modeGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/radioStreaming"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true"
+                android:text="Streaming"/>
+
+            <RadioButton
+                android:id="@+id/radioOffline"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Full attention"/>
+        </RadioGroup>
+
+        <Button
+            android:id="@+id/btnAnalyze"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:enabled="false"
+            android:text="Analyze selected file"/>
+
+        <ProgressBar
+            android:id="@+id/progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:indeterminate="true"
+            android:visibility="gone"/>
+
+        <TextView
+            android:id="@+id/txtStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Ready"/>
+
+        <Button
+            android:id="@+id/btnClear"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="Clear results"/>
+
+        <TextView
+            android:id="@+id/txtResult"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:fontFamily="monospace"
+            android:textIsSelectable="true"
+            android:textSize="15sp"/>
+
+    </LinearLayout>
+</ScrollView>
