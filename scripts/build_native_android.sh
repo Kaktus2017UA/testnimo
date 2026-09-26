@@ -89,4 +89,11 @@ cp -a "${WORK}/nemo-install/." "${SDK_DST}/"
 find "${WORK}/nemo-install" "${WORK}/deps/sentencepiece" \
   -type f -name '*.so' -exec cp -f {} "${JNI_DST}/" \;
 
+LIBOMP="$(find "${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt" -type f -path "*/lib/clang/*/lib/linux/aarch64/libomp.so" | head -n 1 || true)"
+if [[ -z "${LIBOMP}" ]]; then
+  echo "libomp.so not found in Android NDK"
+  exit 1
+fi
+cp -f "${LIBOMP}" "${JNI_DST}/libomp.so"
+
 echo "Native SDK staged. Build with: gradle :app:assembleDebug"
