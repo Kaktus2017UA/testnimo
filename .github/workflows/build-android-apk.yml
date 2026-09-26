@@ -1,0 +1,82 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+    paths:
+      - "app/**"
+      - "scripts/**"
+      - "*.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/build-android-apk.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout app
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager             "platforms;android-35"             "build-tools;35.0.0"             "ndk;27.2.12479018"             "cmake;3.31.1"
+
+      - name: Export NDK
+        shell: bash
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - name: Install host build tools
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build git pkg-config
+
+      - name: Build NeMo-Speech.cpp Android runtime
+        shell: bash
+        run: |
+          chmod +x scripts/build_native_android.sh
+          scripts/build_native_android.sh
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          gradle --no-daemon :app:assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: nemotron-diarization-android-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload native build logs/artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-build-debug
+          path: |
+            .native-build/**/CMakeCache.txt
+            .native-build/**/CMakeFiles/CMakeOutput.log
+            .native-build/**/CMakeFiles/CMakeError.log
+          if-no-files-found: ignore
