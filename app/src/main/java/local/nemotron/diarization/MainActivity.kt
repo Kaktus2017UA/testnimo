@@ -373,7 +373,7 @@ class MainActivity : AppCompatActivity() {
             setTextColor(speakerColors[index])
             setTypeface(typeface, Typeface.BOLD)
             textSize = 13f
-            text = "Speaker \$safeSpeaker   ${formatTime(startMs)}–${formatTime(endMs)}"
+            this.text = "Speaker $safeSpeaker   ${formatTime(startMs)}–${formatTime(endMs)}"
         }
 
         val body = TextView(this).apply {
